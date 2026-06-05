@@ -540,12 +540,123 @@ count, owned count, last opened date. Creating a new collection opens a wizard
   migrating from Tellico (the only other serious desktop collectibles tracker)
   should be able to bring their data in
 
+### Mobile Companion (Android) — Long-term consideration
+
+The primary use case is **out shopping**: checking your grail/wantlist, seeing
+what you already own, and ideally marking something as acquired on the spot.
+The constraint is local-first — no central cloud database.
+
+Four realistic approaches, each with different tradeoffs:
+
+---
+
+**Option A — Desktop as local REST server + VPN tunnel (recommended long-term)**
+
+The desktop app runs a lightweight embedded HTTP server (FastAPI is the natural
+choice given Python) bound to localhost or the LAN interface. A native or web-
+based Android client connects to it.
+
+- **On home WiFi:** Phone connects directly by LAN IP (`http://192.168.x.x:PORT`).
+  Full read+write access. No latency beyond LAN.
+- **Out shopping (away from home WiFi):** Requires a VPN tunnel back to the home
+  machine. Tailscale is the best option here — it is free for personal use,
+  installs on both Windows and Android, creates a peer-to-peer WireGuard mesh with
+  no central server holding your data (Tailscale's coordination server only handles
+  key exchange, not traffic). Once Tailscale is set up, the desktop's local server
+  is reachable at its Tailscale IP from anywhere in the world.
+- **Android client options:**
+  - A **Progressive Web App (PWA)** served by the desktop's HTTP server — no app
+    to build or distribute. Phone opens a browser to the Tailscale IP. A
+    mobile-optimized web UI (separate from the Qt desktop UI) lives in the same
+    codebase. Works on any device with a browser.
+  - A **native Android app** (Kotlin or Flutter) that speaks to the REST API. More
+    work, better native UX, can work offline with local SQLite cache.
+- **No data ever touches a third-party server.** Tailscale's role is purely
+  routing; the data path is phone ↔ home PC directly (encrypted WireGuard).
+- **Effort:** Medium. Requires: adding a FastAPI server layer to the desktop app,
+  designing a REST API surface, and building a mobile-optimized web UI or native
+  app. The REST API is also useful for scripting and future integrations.
+
+---
+
+**Option B — File sync via Syncthing**
+
+Desktop exports a snapshot of the collection (SQLite file or a derived JSON/CSV)
+to a folder that Syncthing watches. Syncthing replicates it to the phone without
+going through any cloud provider.
+
+- **Advantages:** Trivially simple on the desktop side (just write a file).
+  Syncthing is mature, open-source, and genuinely peer-to-peer.
+- **Disadvantages:** Read-only by default — edits on the phone (marking something
+  owned, adding a note while at the store) are hard to sync back without conflict
+  resolution logic. The snapshot can be stale if the desktop app wasn't running
+  recently. Requires Syncthing to be installed and configured separately.
+- **Android app:** Would need to read and render the snapshot format. A minimal
+  read-only Android app or a simple web page reading a JSON export could work.
+- **Best for:** Users who only need to check their list while shopping, never edit
+  on mobile. A "shopping list export" (just grails + wantlist as a simple format)
+  is a low-effort version of this.
+
+---
+
+**Option C — Shopping list export only (minimal, near-term)**
+
+The simplest viable approach for the shopping use case: desktop exports a compact
+JSON or CSV of the user's wantlist + grails (item name, line, franchise, notes,
+any reference images). The user puts this file anywhere accessible on their phone
+(Google Drive, cloud notes app, even just a text file).
+
+- **No sync mechanism required.** User manually exports before going out.
+- **No Android app required.** File is human-readable; or a simple static HTML
+  file with embedded data could be generated for offline viewing in a browser.
+- **Limitations:** No real-time, no marking as acquired in the field. But it covers
+  the core need (checking what you want before buying) with zero infrastructure.
+- **This should be implemented first** as a Phase 1–2 feature regardless of what
+  mobile approach is chosen long-term, since it has immediate value and zero cost.
+
+---
+
+**Option D — PWA only, no native app**
+
+A variant of Option A where the Android "app" is just the mobile-optimized web UI
+served by the desktop, accessed via Tailscale. No app development required.
+Progressive Web Apps can be "installed" on Android from Chrome (added to home
+screen, runs full-screen). If the Tailscale connection is active, it works
+identically to a native app for this use case.
+
+- **Advantages:** One codebase, no app store, no Android SDK. Web UI can be built
+  with any web framework (or plain HTML/CSS/JS).
+- **Disadvantages:** Requires Tailscale to be running on the phone and the desktop
+  to be on and running the server. No offline capability beyond what the browser
+  caches.
+
+---
+
+**Recommended phased approach:**
+
+| Phase | Feature | Effort |
+|---|---|---|
+| Near-term | Shopping list export (JSON + static HTML) | Low |
+| Mid-term | Embedded FastAPI server + mobile-optimized PWA via Tailscale | Medium |
+| Long-term | Native Android app with offline SQLite cache + sync | High |
+
+The REST API surface designed for the PWA also serves as the foundation for a
+future native Android app, so Option A and D are complementary — build A, get D
+for free, and the native app (if ever built) just consumes the same API.
+
+**What this is NOT:** A cloud service, a subscription, or a central database.
+The desktop PC is the authoritative database. The phone is a client. Tailscale
+is a routing layer, not a data store.
+
+---
+
 ### Won't do (by design)
 
 - Cloud sync or accounts — local-first is a core principle
 - Selling/marketplace features — this is a catalog and tracker, not a store
 - Real-time price feeds — snapshots on demand only, to respect API terms and
   avoid stale-data confusion
+- A central server that holds user collection data (even optionally)
 
 ---
 
