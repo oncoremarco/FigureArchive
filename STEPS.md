@@ -11,87 +11,240 @@ Reference documents:
 
 ## Phase 1 — Running Window with a Database
 
-**Deliverable:** The app launches, creates a SQLite database on first run,
-and you can create a Franchise, add a Line to it, and see both in a sidebar tree.
-Nothing imports, nothing scrapes. Pure manual entry and persistence.
+**Deliverable:** On first launch a welcome dialog asks the user to name and locate
+their collection. After that the main window opens, and you can create a Franchise,
+add a Line to it, and see both in a sidebar tree. Nothing imports, nothing scrapes.
+Pure manual entry and persistence.
+
+**First-run decision:** Show a "Create your first collection" welcome dialog on
+first launch (no silent auto-creation). This gives the user control over the
+collection name and folder from day one and avoids having to retrofit it later.
+Subsequent launches open the last-used collection directly (path stored in
+`config.json`). File > New Collection and File > Open Collection are available at
+any time to create or switch collections.
 
 ---
 
-### 1.1 Project skeleton
+### 1.1 Folder structure
 
-- [ ] Create folder structure:
+- [ ] Create the top-level layout:
   ```
-  figure_archive/
+  figure_archive/          ← Python package (the app)
+    __init__.py
     __main__.py
     app.py
+    core/
+      __init__.py
+      config.py
     db/
-      schema.py
+      __init__.py
       connection.py
+      schema.py
+      franchises.py
+      lines.py
     ui/
+      __init__.py
       main_window.py
+      sidebar.py
+      dialogs/
+        __init__.py
+        welcome_dialog.py
+        franchise_dialog.py
+        line_dialog.py
     plugins/
+      __init__.py
       types/
+        __init__.py
       sources/
+        __init__.py
         base.py
     assets/
       styles/
         dark.qss
   requirements.txt
   ```
-- [ ] Write `requirements.txt` (PySide6, requests, beautifulsoup4, Pillow)
-- [ ] Write `__main__.py` — entry point that calls `app.py`
-- [ ] Write `app.py` — creates QApplication, applies stylesheet, opens MainWindow
+- [ ] Add an empty `__init__.py` to every subdirectory listed above
 
-### 1.2 Database creation
+### 1.2 requirements.txt
 
-- [ ] Write `db/connection.py` — opens (or creates) a `.db` file; returns a
-  `sqlite3.Connection`; stores the path in a module-level variable
-- [ ] Write `db/schema.py` — contains the full `CREATE TABLE IF NOT EXISTS`
-  statements for all tables from the spec plus `auction_log`
-- [ ] On app startup, run schema creation so a fresh database is always valid
+- [ ] Add dependencies:
+  ```
+  PySide6>=6.6.0
+  requests>=2.31.0
+  beautifulsoup4>=4.12.0
+  Pillow>=10.0.0
+  WeasyPrint>=60.0
+  lxml>=4.9.0
+  ```
 
-### 1.3 Main window shell
+### 1.3 core/config.py — app-level settings
 
-- [ ] Write `ui/main_window.py` — `QMainWindow` with:
-  - A left sidebar panel (fixed width, placeholder label for now)
-  - A right content area (placeholder label)
-  - A menu bar with File > New Collection, File > Open Collection, File > Quit
+- [ ] Resolve the platform data directory:
+  - Windows: `%APPDATA%\FigureArchive\`
+  - Linux/Mac: `~/.local/share/FigureArchive/`
+- [ ] Create that directory if it doesn't exist
+- [ ] Load `config.json` from it on startup (empty dict if file doesn't exist)
+- [ ] Save `config.json` on any change
+- [ ] Expose: `get(key, default)`, `set(key, value)`, `app_data_dir()`,
+  `collections_dir()` (returns `<app_data_dir>/collections/`)
+- [ ] Key stored in config: `last_collection_path` (full path to last-opened `.db`)
 
-### 1.4 Basic QSS dark theme
+### 1.4 db/connection.py — database connection
 
-- [ ] Write `assets/styles/dark.qss` — set background color, text color, and
-  font for `QMainWindow`, `QWidget`, `QSplitter`
-- [ ] Load and apply the stylesheet in `app.py` on startup
+- [ ] `open_collection(db_path)` — opens the SQLite file at `db_path` with
+  `sqlite3.connect()`; enables WAL mode and foreign keys; stores connection in a
+  module-level variable; returns the connection
+- [ ] `get_connection()` — returns the current open connection; raises if none open
+- [ ] `close_collection()` — closes the current connection and clears the variable
+- [ ] The connection is opened once at startup and reused everywhere
 
-### 1.5 Franchise CRUD
+### 1.5 db/schema.py — full database schema
 
-- [ ] Write `db/franchises.py` — functions: `create_franchise(name)`,
-  `list_franchises()`, `delete_franchise(id)`
-- [ ] Add "New Franchise" button to the sidebar
-- [ ] Clicking it opens a `QDialog` with a name field and OK/Cancel
-- [ ] On OK, insert into DB and refresh the sidebar
+- [ ] Write all `CREATE TABLE IF NOT EXISTS` statements for every table:
+  - From spec: `sources`, `franchises`, `lines`, `waves`, `items`, `item_images`,
+    `collection_entries`, `personal_photos`, `tags`, `item_tags`, `variants`,
+    `import_log`
+  - From design notes: `auction_log`
+- [ ] Add columns not in the original spec but decided in design notes:
+  - `lines.type_plugin_id TEXT` — which collection type plugin this line uses
+  - `collection_entries.wishlist_priority INTEGER DEFAULT 0` — 0/1/2 (Watching/Wanted/Grail)
+  - `collection_entries.needs_repair INTEGER DEFAULT 0`
+  - `collection_entries.is_loaned INTEGER DEFAULT 0`
+  - `collection_entries.loaned_to TEXT`
+  - `collection_entries.is_for_sale INTEGER DEFAULT 0`
+  - `collection_entries.is_sealed INTEGER DEFAULT 0`
+  - `collection_entries.packaging_state TEXT` — MOC/MIB/MISB/Loose/etc.
+  - `collection_entries.box_condition TEXT` — separate from figure condition
+  - `collection_entries.is_complete INTEGER DEFAULT 1`
+  - `collection_entries.missing_accessories TEXT`
+- [ ] `apply_schema(connection)` — runs all CREATE TABLE statements against a
+  given connection; called once after opening any collection
 
-### 1.6 Line CRUD
+### 1.6 ui/dialogs/welcome_dialog.py — first-run dialog
 
-- [ ] Write `db/lines.py` — functions: `create_line(franchise_id, name)`,
-  `list_lines(franchise_id)`, `delete_line(id)`
-- [ ] Add "New Line" button that appears when a franchise is selected
-- [ ] Clicking it opens a dialog (name field, collection type dropdown — just
-  "Generic" for now)
-- [ ] On OK, insert into DB and refresh
+- [ ] `WelcomeDialog(QDialog)` — shown when `config.last_collection_path` is
+  absent or points to a file that no longer exists
+- [ ] Content:
+  - App name / logo placeholder at top
+  - "Create a new collection" section:
+    - Collection name field (default: "My Collection")
+    - Folder path field + Browse button (defaults to
+      `<collections_dir>/<name>/`)
+    - Collection name field auto-updates the folder path as the user types
+  - "Open existing collection" section:
+    - Browse button → file picker for `.db` files
+  - OK button (disabled until a valid name is entered or an existing file is
+    picked)
+- [ ] On accept: either create the folder + open a new DB, or open the existing
+  one; return the resolved DB path to the caller
+- [ ] On reject (close without completing): quit the application
 
-### 1.7 Sidebar tree
+### 1.7 app.py + __main__.py — entry point
 
-- [ ] Replace the sidebar placeholder with a `QTreeWidget`
-- [ ] Populate tree from DB on startup: franchises as top-level items,
-  lines as children
-- [ ] Refresh tree after any create/delete
-- [ ] Right-click franchise → "Add Line", "Rename", "Delete"
-- [ ] Right-click line → "Rename", "Delete"
+- [ ] `__main__.py` — calls `main()` from `app.py`
+- [ ] `app.py` `main()` function:
+  1. Create `QApplication`
+  2. Load and apply `dark.qss` stylesheet
+  3. Load config
+  4. If no valid `last_collection_path` in config, show `WelcomeDialog`
+  5. Open the collection: `open_collection(path)` → `apply_schema(conn)`
+  6. Save the path to config
+  7. Create and show `MainWindow`
+  8. Enter the Qt event loop
 
-**Phase 1 test:** Run the app. Create a franchise called "Transformers". Add a
-line called "Generation 1". See both in the sidebar tree. Quit and relaunch —
-both are still there.
+### 1.8 assets/styles/dark.qss — dark theme
+
+- [ ] Set base colors for `QMainWindow`, `QWidget`, `QDialog`:
+  - Background: `#1e1e2e` (dark navy)
+  - Text: `#cdd6f4` (light lavender-white)
+- [ ] Style `QSplitter::handle` — subtle divider line
+- [ ] Style `QMenuBar` and `QMenu` — matching dark background
+- [ ] Style `QTreeWidget` — dark background, highlight color on selected row
+- [ ] Style `QPushButton` — rounded, accent color (`#89b4fa` blue) on hover
+- [ ] Style `QLineEdit` and `QComboBox` — dark input fields, visible border
+- [ ] Style `QDialog` — same background as main window
+- [ ] Style `QLabel` — correct text color inheritance
+
+### 1.9 ui/main_window.py — main window shell
+
+- [ ] `MainWindow(QMainWindow)`:
+  - Window title: "FigureArchive"
+  - Minimum size: 900×600
+  - A `QSplitter` (horizontal) as the central widget
+  - Left pane: `Sidebar` widget (from `ui/sidebar.py`), fixed initial width 240px
+  - Right pane: a `QStackedWidget` for swapping content (placeholder `QLabel`
+    "Select a line to begin" for now)
+  - Menu bar:
+    - File > New Collection (opens WelcomeDialog in "create" mode)
+    - File > Open Collection (file picker for `.db` files)
+    - File > Quit
+  - Status bar: shows current collection name and path
+
+### 1.10 ui/sidebar.py — sidebar with franchise/line tree
+
+- [ ] `Sidebar(QWidget)`:
+  - A `QTreeWidget` filling the sidebar
+  - A "New Franchise" button at the bottom
+  - `load_tree()` — queries `franchises` and `lines` tables, populates the tree:
+    franchises as top-level `QTreeWidgetItem`, lines as children
+  - `refresh()` — clears and reloads the tree
+  - Clicking a line item emits a `line_selected(line_id)` signal to the main window
+
+### 1.11 db/franchises.py
+
+- [ ] `create_franchise(name) -> str` — inserts row, returns new UUID
+- [ ] `list_franchises() -> list[dict]` — returns all rows as dicts
+- [ ] `rename_franchise(id, name)` — updates name
+- [ ] `delete_franchise(id)` — deletes franchise and its child lines (cascade)
+
+### 1.12 ui/dialogs/franchise_dialog.py
+
+- [ ] `FranchiseDialog(QDialog)` — simple dialog with a name `QLineEdit`,
+  OK (disabled until name is non-empty) and Cancel buttons
+- [ ] Used for both create (empty field) and rename (pre-filled)
+
+### 1.13 Wire franchise CRUD into sidebar
+
+- [ ] "New Franchise" button → opens `FranchiseDialog` → on accept calls
+  `create_franchise()` → calls `sidebar.refresh()`
+- [ ] Right-click franchise node → context menu:
+  - "Add Line" (opens line dialog, see below)
+  - "Rename" → opens `FranchiseDialog` pre-filled → calls `rename_franchise()`
+  - "Delete" → confirmation `QMessageBox` → calls `delete_franchise()` → refresh
+
+### 1.14 db/lines.py
+
+- [ ] `create_line(franchise_id, name, type_plugin_id="generic") -> str`
+- [ ] `list_lines(franchise_id) -> list[dict]`
+- [ ] `rename_line(id, name)`
+- [ ] `delete_line(id)`
+
+### 1.15 ui/dialogs/line_dialog.py
+
+- [ ] `LineDialog(QDialog)` — fields: name `QLineEdit`, collection type
+  `QComboBox` (hard-coded to just "Generic" for Phase 1; will be populated from
+  plugins in Phase 4), OK/Cancel
+- [ ] Used for both create and rename (type dropdown hidden on rename)
+
+### 1.16 Wire line CRUD into sidebar
+
+- [ ] Right-click franchise → "Add Line" → opens `LineDialog` → calls
+  `create_line()` → refresh tree, expand parent franchise node
+- [ ] Right-click line node → context menu:
+  - "Rename" → opens `LineDialog` (name only) pre-filled
+  - "Delete" → confirmation → calls `delete_line()` → refresh
+
+**Phase 1 test:** Run `python -m figure_archive`.
+- First launch: welcome dialog appears. Enter "My Transformers Collection",
+  accept the default folder, click OK.
+- Main window opens with dark theme, empty sidebar tree.
+- Click "New Franchise" → enter "Transformers" → tree shows it.
+- Right-click "Transformers" → "Add Line" → enter "Generation 1", type Generic →
+  tree shows it as a child.
+- Right-click "Transformers" → "Rename" → change to "Transformers (Hasbro)" →
+  tree updates.
+- Quit. Relaunch — welcome dialog is skipped, main window opens directly,
+  "Transformers (Hasbro)" and "Generation 1" are still in the tree.
 
 ---
 
