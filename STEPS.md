@@ -377,7 +377,7 @@ saved data is still there.
 
 ---
 
-## Phase 4 — Plugin System Foundation
+## Phase 4 — Plugin System Foundation   ✅ DONE
 
 **Deliverable:** The plugin loader runs at startup and registers available
 plugins. A "collection type" plugin for Action Figures is loaded and its field
