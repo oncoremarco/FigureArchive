@@ -300,6 +300,45 @@ for any of these sites exist as of this research — this code is net-new.
 | Any UPC | UPCitemdb | None (100/day free) | raw `requests` |
 | Any UPC (fallback) | Open Products Facts | None | raw `requests` |
 
+### Preformatted / openly-licensed bulk datasets (no-scrape path)
+
+Researched 2026-06-14 in response to "can we get preformatted toyline data without
+scraping?" Live GitHub search + prior knowledge. **Verdict: no clean, comprehensive
+open *action-figure* dataset exists** — GitHub search for action-figure datasets
+returns zero relevant results, which is exactly why the fan registries (and
+scraping) are the usual route. But several adjacent collectible domains the app
+already supports as *types* have excellent openly-licensed bulk data:
+
+| Source | Domain | License | Bulk access | Bundle-able? |
+|---|---|---|---|---|
+| **Wikidata** | Toylines + *notable* figures, broad | **CC0 (public domain)** | SPARQL endpoint + REST + full dumps | **Yes — best general source** |
+| **Discogs** | Vinyl / music | **CC0** monthly data dumps (XML) | Direct download | Yes |
+| **MusicBrainz** | Music | **CC0** core data + dumps | Direct download | Yes |
+| **Rebrickable** | LEGO sets/parts | Free CSV downloads (attribution) | Direct CSV | Yes, with credit |
+| **GCD** | Comics | Downloadable SQL dumps (attribution) | Account + dump | Yes, with credit |
+| **DBpedia** | Wikipedia infoboxes (toylines) | CC-BY-SA (copyleft) | SPARQL + dumps | Yes, but share-alike |
+
+**Key takeaways:**
+- **Wikidata is the one broad source we can freely bundle** (CC0). Coverage of
+  *individual* vintage action figures is patchy, but toylines and notable figures
+  (Transformers, Star Wars, MOTU, G.I. Joe) are present, with properties like
+  manufacturer (P176), inception (P571), publication date (P577), part-of-series
+  (P179). A one-time SPARQL query (run outside the app) can produce a CC0 catalog.
+- For action figures specifically, the realistic no-scrape path is **curated +
+  Wikidata-derived "seed packs"**, not a turnkey download.
+
+**Proposed mechanism — "data packs" (fully offline, no network in the app):**
+Define a versioned **JSON import format** mirroring our model
+(`franchise → line → groups → items`, with source attribution + license fields).
+Packs can be produced from *any* source (a one-time Wikidata SPARQL export, hand
+curation, or community contributions) and dropped into the app. The app ships a
+couple of CC0-derived starter packs and an "Import Data Pack…" action. This:
+- needs **zero live scraping** — unblocked even in the network-restricted dev env,
+- reuses the same import/attribution plumbing the deferred Phase 6 will need,
+- lets the community grow catalog coverage without each user hitting any site.
+
+This is the recommended near-term way to get "preformatted toyline data" in.
+
 ### eBay API
 
 - **Legacy APIs dead:** Finding API and Shopping API decommissioned February 2025.
