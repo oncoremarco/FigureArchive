@@ -1,0 +1,34 @@
+<mediawiki xmlns="http://www.mediawiki.org/xml/export-0.11/" version="0.11" xml:lang="en">
+  <siteinfo>
+    <sitename>Sample Wiki</sitename>
+  </siteinfo>
+  <page>
+    <title>Optimus Prime (G1)</title>
+    <ns>0</ns>
+    <id>101</id>
+    <revision>
+      <timestamp>2023-01-02T03:04:05Z</timestamp>
+      <text>Optimus Prime is an Autobot leader.
+[[Category:1984 toys]] [[Category:Autobot Cars]]</text>
+    </revision>
+  </page>
+  <page>
+    <title>Grimlock (G1)</title>
+    <ns>0</ns>
+    <id>102</id>
+    <revision>
+      <timestamp>2023-02-02T03:04:05Z</timestamp>
+      <text>Grimlock leads the Dinobots.
+[[Category:1985 toys]][[Category: Dinobots ]]</text>
+    </revision>
+  </page>
+  <page>
+    <title>Category:Dinobots</title>
+    <ns>14</ns>
+    <id>900</id>
+    <revision>
+      <timestamp>2023-03-02T03:04:05Z</timestamp>
+      <text>Dinobot toys.</text>
+    </revision>
+  </page>
+</mediawiki>

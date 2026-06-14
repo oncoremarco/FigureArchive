@@ -557,6 +557,34 @@ an indented "Autobot Cars" header beneath the "1984" header.
 
 ---
 
+## Phase 5.7 — Fandom XML Dump Tooling   ✅ DONE (fetch path runs on user machine)
+
+**Deliverable:** A no-scrape way to pull bulk catalog data: download Fandom's
+*official* CC-BY-SA XML database dumps (linked from each wiki's
+`Special:Statistics`), decompress, and index them. Starter wikis: Transformers
+(Teletraan I), Mighty Max, McDonald's (kidsmeal). Foundation for importing dump
+data into collections later.
+
+> **Note:** Fandom data is community-edited — **not exhaustive, not guaranteed
+> accurate**, CC-BY-SA (attribution + share-alike). Every download writes a
+> manifest recording source/license/accuracy caveats, and the CLI prints the
+> warning. Live download can't run in the egress-restricted dev sandbox; it runs
+> on the end user's machine. Parser + URL-resolution + decompress are unit-tested
+> offline against fixtures.
+
+- [x] `core/fandom_dump.py` — wiki registry, `resolve_dump_url` (parses the
+  Special:Statistics page for the current/full `.7z` link), `download_dump`
+  (streams + writes manifest), `decompress_dump` (py7zr)
+- [x] `core/mediawiki_xml.py` — streaming `iter_pages` (lxml iterparse, memory-safe)
+  + `index_dump` (page count + category histogram preview)
+- [x] `tools/fetch_fandom_dump.py` — CLI: `--list`, download one/many, `--index`
+- [x] `tests/test_fandom_dump.py` — offline tests (parser, namespace filter,
+  index, dump-URL resolution via fake session, decompress round-trip)
+- [ ] *Next:* wiki-specific extraction of dump pages → franchise/line/group/item,
+  and an in-app "Import Data Pack / Dump" action (with attribution surfaced)
+
+---
+
 ## Phase 6 — Source Plugins / Network Import   ⏸️ DEFERRED
 
 > **Deferred 2026-06-14 — no network access in the dev environment.** The remote
