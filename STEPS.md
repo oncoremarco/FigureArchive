@@ -448,7 +448,7 @@ Near Mint/Good/Poor.
 
 ---
 
-## Phase 5 — Images and Local Cache
+## Phase 5 — Images and Local Cache   ✅ DONE
 
 **Deliverable:** Items can have images. A catalog image can be added manually by
 dragging a file onto the detail panel or via a file picker. Personal photos can be

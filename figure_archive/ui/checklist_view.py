@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QFrame, QHBoxLayout, QLabel, QMenu, QPushButton,
     QScrollArea, QVBoxLayout, QWidget,
 )
+from figure_archive.ui.widgets.thumbnail_loader import load_thumbnail_async
 
 from figure_archive.db import items as item_db
 from figure_archive.db import lines as line_db
@@ -53,7 +54,6 @@ class ItemRow(QFrame):
         self._check.stateChanged.connect(self._on_check)
         layout.addWidget(self._check)
 
-        # Thumbnail placeholder (Phase 5 fills this)
         thumb = QLabel()
         thumb.setFixedSize(40, 40)
         thumb.setStyleSheet(
@@ -61,7 +61,11 @@ class ItemRow(QFrame):
             "border-radius: 4px; color: #45475a;"
         )
         thumb.setAlignment(Qt.AlignCenter)
-        thumb.setText("▦")
+        primary = self._item.get("primary_image")
+        if primary:
+            load_thumbnail_async(thumb, primary, size=40)
+        else:
+            thumb.setText("▦")
         layout.addWidget(thumb)
 
         name = QLabel(self._item["name"])

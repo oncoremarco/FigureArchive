@@ -1,16 +1,25 @@
+from pathlib import Path
+
 from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout,
-    QLabel, QLineEdit, QMenu, QPlainTextEdit, QPushButton, QScrollArea,
-    QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
+    QHBoxLayout, QLabel, QLineEdit, QMenu, QPlainTextEdit, QPushButton,
+    QScrollArea, QVBoxLayout, QWidget,
 )
 
+from figure_archive.core import image_cache
 from figure_archive.db import items as item_db
+from figure_archive.db import item_images as img_db
+from figure_archive.db import personal_photos as photo_db
 from figure_archive.db import collection_entries as ce
 from figure_archive.db import tags as tag_db
 from figure_archive.plugins import loader
+from figure_archive.ui.image_carousel import ImageCarousel
 from figure_archive.ui.widgets.star_rating import StarRating
 from figure_archive.ui.dialogs.tag_dialog import TagDialog
+
+_IMG_ACCEPT = "Images (*.jpg *.jpeg *.png *.gif *.webp);;All files (*)"
 
 _STATUS_OPTIONS = [
     (ce.NOT_OWNED, "Not Owned"),
@@ -90,6 +99,7 @@ class DetailPanel(QWidget):
 
         self._build_catalog_section()
         self._build_personal_section()
+        self._build_photos_section()
         self._build_tags_section()
         self._body.addStretch(1)
 
@@ -107,6 +117,7 @@ class DetailPanel(QWidget):
         return lbl
 
     def _build_catalog_section(self) -> None:
+        # Primary image preview
         self._image = QLabel("No Image")
         self._image.setFixedHeight(160)
         self._image.setAlignment(Qt.AlignCenter)
@@ -115,6 +126,22 @@ class DetailPanel(QWidget):
             "border-radius: 6px; color: #45475a;"
         )
         self._body.addWidget(self._image)
+
+        # Image action buttons
+        img_btns = QHBoxLayout()
+        set_img_btn = QPushButton("Set Image…")
+        set_img_btn.clicked.connect(self._set_primary_image)
+        img_btns.addWidget(set_img_btn)
+        img_btns.addStretch(1)
+        self._body.addLayout(img_btns)
+
+        # Additional catalog images carousel
+        self._body.addWidget(self._section_header("CATALOG IMAGES"))
+        self._catalog_carousel = ImageCarousel(can_add=True)
+        self._catalog_carousel.image_selected.connect(self._preview_image)
+        self._catalog_carousel.image_added.connect(self._add_catalog_image)
+        self._catalog_carousel.image_removed.connect(self._remove_catalog_image)
+        self._body.addWidget(self._catalog_carousel)
 
         self._catalog_info = QLabel("")
         self._catalog_info.setWordWrap(True)
@@ -221,6 +248,14 @@ class DetailPanel(QWidget):
         self._body.addWidget(QLabel("Notes:"))
         self._body.addWidget(self._notes)
 
+    def _build_photos_section(self) -> None:
+        self._body.addWidget(self._section_header("YOUR PHOTOS"))
+        self._photos_carousel = ImageCarousel(can_add=True)
+        self._photos_carousel.image_selected.connect(self._preview_image)
+        self._photos_carousel.image_added.connect(self._add_personal_photo)
+        self._photos_carousel.image_removed.connect(self._remove_personal_photo)
+        self._body.addWidget(self._photos_carousel)
+
     def _build_tags_section(self) -> None:
         self._body.addWidget(self._section_header("TAGS"))
         self._tags_container = QWidget()
@@ -247,6 +282,15 @@ class DetailPanel(QWidget):
         self._breadcrumb.setText(self._build_breadcrumb(line, item))
         self._fav_btn.setChecked(bool(entry.get("is_favorite")))
         self._render_fav_button()
+
+        # Images
+        self._load_primary_image(item.get("primary_image"))
+        self._catalog_carousel.set_images(
+            [r["local_path"] for r in img_db.list_images(item_id) if r.get("local_path")]
+        )
+        self._photos_carousel.set_images(
+            [r["local_path"] for r in photo_db.list_photos(item_id) if r.get("local_path")]
+        )
 
         # Catalog info
         self._catalog_info.setText(self._format_catalog(item))
@@ -280,6 +324,101 @@ class DetailPanel(QWidget):
         self._refresh_tags()
 
         self._loading = False
+
+    # ── Image handling ───────────────────────────────────────────────────────
+
+    def _load_primary_image(self, local_path: str | None) -> None:
+        if not local_path:
+            self._image.setText("No Image")
+            self._image.setPixmap(QPixmap())
+            return
+        thumb = image_cache.get_thumbnail_path(local_path)
+        if thumb and thumb.exists():
+            px = QPixmap(str(thumb)).scaled(
+                self._image.width() or 300, 160,
+                Qt.KeepAspectRatio, Qt.SmoothTransformation,
+            )
+            self._image.setText("")
+            self._image.setPixmap(px)
+        else:
+            self._image.setText("No Image")
+
+    def _preview_image(self, local_path: str) -> None:
+        """Show a carousel-selected image in the primary preview area."""
+        self._load_primary_image(local_path)
+
+    def _set_primary_image(self) -> None:
+        if not self._item_id:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Select image", "", _IMG_ACCEPT)
+        if not path:
+            return
+        dest = image_cache.cache_image_from_file(path, self._item_id)
+        if dest:
+            img_db.set_primary_image(self._item_id, str(dest))
+            img_db.add_image(self._item_id, str(dest))
+            self._load_primary_image(str(dest))
+            self._catalog_carousel.set_images(
+                [r["local_path"] for r in img_db.list_images(self._item_id)
+                 if r.get("local_path")]
+            )
+            self.data_saved.emit()
+
+    def _add_catalog_image(self, path: str) -> None:
+        if not self._item_id:
+            return
+        dest = image_cache.cache_image_from_file(path, self._item_id)
+        if dest:
+            img_db.add_image(self._item_id, str(dest))
+            self._catalog_carousel.set_images(
+                [r["local_path"] for r in img_db.list_images(self._item_id)
+                 if r.get("local_path")]
+            )
+            if not item_db.get_item(self._item_id).get("primary_image"):
+                img_db.set_primary_image(self._item_id, str(dest))
+                self._load_primary_image(str(dest))
+            self.data_saved.emit()
+
+    def _remove_catalog_image(self, path: str) -> None:
+        if not self._item_id:
+            return
+        rows = img_db.list_images(self._item_id)
+        for row in rows:
+            if row["local_path"] == path:
+                img_db.remove_image(row["id"])
+        item = item_db.get_item(self._item_id)
+        if item and item.get("primary_image") == path:
+            remaining = [r for r in img_db.list_images(self._item_id) if r.get("local_path")]
+            new_primary = remaining[0]["local_path"] if remaining else None
+            img_db.set_primary_image(self._item_id, new_primary)
+            self._load_primary_image(new_primary)
+        self._catalog_carousel.set_images(
+            [r["local_path"] for r in img_db.list_images(self._item_id)
+             if r.get("local_path")]
+        )
+        self.data_saved.emit()
+
+    def _add_personal_photo(self, path: str) -> None:
+        if not self._item_id:
+            return
+        dest = image_cache.cache_image_from_file(path, self._item_id)
+        if dest:
+            photo_db.add_photo(self._item_id, str(dest))
+            self._photos_carousel.set_images(
+                [r["local_path"] for r in photo_db.list_photos(self._item_id)
+                 if r.get("local_path")]
+            )
+
+    def _remove_personal_photo(self, path: str) -> None:
+        if not self._item_id:
+            return
+        for row in photo_db.list_photos(self._item_id):
+            if row["local_path"] == path:
+                photo_db.remove_photo(row["id"])
+        self._photos_carousel.set_images(
+            [r["local_path"] for r in photo_db.list_photos(self._item_id)
+             if r.get("local_path")]
+        )
 
     def _lookup_line(self, line_id: str) -> dict | None:
         from figure_archive.db.connection import get_connection
