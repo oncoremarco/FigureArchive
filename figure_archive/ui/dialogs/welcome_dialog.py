@@ -121,12 +121,14 @@ class WelcomeDialog(QDialog):
             default_path = config.collections_dir() / safe / "collection.db"
             self._folder_edit.setText(str(default_path))
             self._db_path = default_path
-            self._buttons.button(QDialogButtonBox.Ok).setEnabled(True)
+            if hasattr(self, "_buttons"):
+                self._buttons.button(QDialogButtonBox.Ok).setEnabled(True)
         else:
             self._folder_edit.setText("")
             if not self._open_path_label.text().endswith(".db"):
                 self._db_path = None
-                self._buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+                if hasattr(self, "_buttons"):
+                    self._buttons.button(QDialogButtonBox.Ok).setEnabled(False)
 
     def _browse_new_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
