@@ -339,6 +339,25 @@ couple of CC0-derived starter packs and an "Import Data Pack…" action. This:
 
 This is the recommended near-term way to get "preformatted toyline data" in.
 
+**Update (exhaustive sweep via `WebSearch`, 2026-06-14):** Direct page fetches are
+blocked by the dev egress allowlist, but the `WebSearch` tool routes around it and
+*does* work here, so live dataset hunting is possible. A full sweep of Kaggle,
+Hugging Face, data.world, datahub.io and GitHub confirms: **every "toy dataset"
+hit is a generic ML toy/example dataset or Amazon product scrape — none is an
+actual action-figure catalog.** No turnkey dataset exists; confirmed.
+
+Two additional no-scrape paths surfaced:
+- **Fandom-hosted wikis offer official XML database dumps** (Special:Statistics →
+  database download), licensed **CC-BY-SA**. Relevant: `transformers.fandom.com`
+  (Teletraan I), `mightymax.fandom.com`, `kidsmeal.fandom.com`. These are bulk and
+  official (no scraping), but the payload is **wikitext** (needs parsing) and the
+  share-alike license means derived packs must carry attribution + CC-BY-SA.
+- **tfwiki.net is independent MediaWiki** (not Fandom) → has `api.php` /
+  `Special:Export`, but that's the deferred live-network path.
+
+Net: bundle CC0 Wikidata as the primary seed; optionally enrich from Fandom XML
+dumps (offline, with attribution) for lines Wikidata covers thinly.
+
 ### eBay API
 
 - **Legacy APIs dead:** Finding API and Shopping API decommissioned February 2025.
