@@ -29,6 +29,9 @@ def main() -> None:
     _load_stylesheet(app)
     config.load()
 
+    from figure_archive.plugins import loader
+    loader.load_plugins()
+
     db_path = _resolve_collection()
 
     if db_path is None:

@@ -4,17 +4,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QVBoxLayout,
 )
 
-# Will be populated from plugin loader in Phase 4.
-# For now: a static list of known type IDs → display names.
-_BUILTIN_TYPES = [
-    ("generic", "Generic"),
-    ("action_figures", "Action Figures"),
-    ("comics", "Comics"),
-    ("vinyl", "Vinyl / Music"),
-    ("board_games", "Board Games"),
-    ("video_games", "Video Games"),
-    ("trading_cards", "Trading Cards"),
-]
+from figure_archive.plugins import loader
 
 
 class LineDialog(QDialog):
@@ -39,8 +29,17 @@ class LineDialog(QDialog):
         form.addRow(QLabel("Name:"), self._name_edit)
 
         self._type_combo = QComboBox()
-        for type_id, label in _BUILTIN_TYPES:
-            self._type_combo.addItem(label, userData=type_id)
+        plugins = loader.list_type_plugins()
+        if plugins:
+            for plugin in plugins:
+                self._type_combo.addItem(plugin.name, userData=plugin.id)
+        else:
+            # Fallback if plugins haven't been loaded (e.g. in tests)
+            self._type_combo.addItem("Generic", userData="generic")
+        # Default selection to Generic
+        idx = self._type_combo.findData("generic")
+        if idx >= 0:
+            self._type_combo.setCurrentIndex(idx)
         if show_type:
             form.addRow(QLabel("Type:"), self._type_combo)
 

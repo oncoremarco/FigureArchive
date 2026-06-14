@@ -35,7 +35,7 @@ class WelcomeDialog(QDialog):
 
         # Divider
         line = QFrame()
-        line.setFrameShape(QFrame.HLine)
+        line.setFrameShape(QFrame.Shape.HLine)
         line.setStyleSheet("color: #313244;")
         root.addWidget(line)
 
@@ -45,7 +45,7 @@ class WelcomeDialog(QDialog):
 
         # Divider
         line2 = QFrame()
-        line2.setFrameShape(QFrame.HLine)
+        line2.setFrameShape(QFrame.Shape.HLine)
         line2.setStyleSheet("color: #313244;")
         root.addWidget(line2)
 

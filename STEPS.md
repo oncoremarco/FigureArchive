@@ -248,7 +248,7 @@ any time to create or switch collections.
 
 ---
 
-## Phase 2 — Items and the Checklist View
+## Phase 2 — Items and the Checklist View   ✅ DONE
 
 **Deliverable:** Select a Line in the sidebar and see an empty checklist.
 Manually add items to the line. Each item appears as a row. Click a checkbox
@@ -308,7 +308,13 @@ owned. Quit and relaunch — Optimus is still checked.
 
 ---
 
-## Phase 3 — Item Detail Panel
+## Phase 3 — Item Detail Panel   ✅ DONE
+
+> Note: the **type-plugin foundation** (Phase 4.1–4.4: `plugins/types/base.py`,
+> `loader.py`, `generic`, `action_figures`, `comics`) was pulled forward during
+> Phase 3, because the detail panel's condition/packaging vocabularies are driven
+> by the line's type plugin. Phase 4 now only needs the source-plugin base class,
+> source loading, and wiring the line dialog (already done) — see Phase 4 notes.
 
 **Deliverable:** Click any item in the checklist and a detail panel opens on the
 right side of the window. You can edit personal data (condition, notes, tags,
