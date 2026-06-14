@@ -557,12 +557,35 @@ an indented "Autobot Cars" header beneath the "1984" header.
 
 ---
 
-## Phase 6 — First Source Plugin (Figure Realm)
+## Phase 6 — Source Plugins / Network Import   ⏸️ DEFERRED
 
-**Deliverable:** An Import dialog lets you browse Figure Realm by manufacturer and
-series. Selecting a series and clicking Import fetches all figures in that series
-and adds them to the database as items, with images cached locally. A progress
-bar shows the download. This is the first real network operation.
+> **Deferred 2026-06-14 — no network access in the dev environment.** The remote
+> execution environment uses a curated egress allowlist (pypi.org, github.com,
+> files.pythonhosted.org reachable; everything else — toy databases *and*
+> wikipedia.org, httpbin.org, example.com — returns 403 at the proxy). We cannot
+> reach any external content site to check robots.txt, fetch live pages, or test
+> a parser against real responses. Building the import pipeline now would mean
+> developing blind against fixtures with no way to verify until the policy
+> changes, so it is parked until a later, network-enabled stage of development.
+>
+> **Decided strategy when resumed (see chat 2026-06-14):**
+> - **URL-import only** to start (one request per deliberate user paste); defer
+>   bulk browse/crawl to a still-later phase.
+> - **Politeness lives in a shared framework HTTP client**, not per-plugin:
+>   robots.txt gate, hard rate-limit, aggressive disk cache (catalog data is
+>   immutable → near-zero repeat requests), conditional requests (ETag /
+>   If-Modified-Since), honest identifying User-Agent, backoff + circuit breaker.
+> - Plugins receive already-fetched, cached HTML and only **parse** (testable on
+>   saved fixtures); they never fetch directly.
+> - Respect robots.txt / ToS programmatically; no proactive outreach.
+>
+> The original "browse Figure Realm by series and bulk-import" deliverable below
+> is superseded by the URL-import-first plan and pushed to a later bulk phase.
+
+**Original deliverable (superseded):** An Import dialog lets you browse Figure
+Realm by manufacturer and series. Selecting a series and clicking Import fetches
+all figures in that series and adds them to the database as items, with images
+cached locally. A progress bar shows the download.
 
 ---
 
