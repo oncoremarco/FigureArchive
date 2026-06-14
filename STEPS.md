@@ -501,6 +501,59 @@ all images still appear.
 
 ---
 
+## Phase 5.5 — Nested Groups + Input Safety   ✅ DONE
+
+**Deliverable:** A Line's checklist can be subdivided into an arbitrary tree of
+groups (e.g. Transformers › Generation 1 › 1984 › Autobot Cars), rendered as
+indented headers in the checklist. Input widgets can no longer have their value
+changed by an accidental mouse-wheel scroll.
+
+### Context / structural decision
+
+Real toylines nest more deeply than a single flat "wave" level:
+- **TF G1** (tfwiki): `1984 → Autobot Cars / Decepticons / Mini-Vehicles`, then
+  `1985 → Dinobots / Insecticons / …` — a year level *and* a subgroup level.
+- **Mighty Max**: `Doom Zones → Horror Heads → …` — series → sub-series.
+- **McDonald's Changeables**: `1987 set / 1989 set` — year *is* the subgroup.
+
+A fixed-depth tree can't capture all three, and the "primary axis" (year vs.
+theme vs. assortment) differs per line. **Decision:** generalise the existing
+flat `waves` level into a self-nesting **Group** concept (rename Wave → Group in
+the UI), and render the nesting *inside the checklist* as indented headers (not
+as sidebar tree nodes) so the whole line reads as one scrollable completion
+checklist mirroring the wiki page layout. Cross-cutting axes (faction, scale)
+stay as item **tags**, since a figure can be both "1985" and "a Dinobot."
+
+### 5.5.1 Mouse-wheel data-safety fix   ✅
+
+- [x] `ui/widgets/no_scroll.py` — `NoScrollComboBox`, `NoScrollSpinBox`,
+  `NoScrollDoubleSpinBox`: ignore `wheelEvent` unless the widget has focus;
+  focus policy set to `StrongFocus` so they take focus only on click/tab
+- [x] Swap every combo/spin in `detail_panel.py` to the no-scroll variants
+
+### 5.5.2 Favorite star clipping fix   ✅
+
+- [x] Fixed-square (34×34) fav button with zeroed padding + centered glyph so
+  the star is no longer clipped by the global QSS button padding
+
+### 5.5.3 Self-nesting groups (planned)
+
+- [ ] Schema: add nullable self-FK `parent_id` to the `waves` table
+- [ ] DB layer: group CRUD gains `parent_id`; add a "list groups as tree" query
+- [ ] Item attaches to a leaf group, or directly to the Line if ungrouped
+- [ ] `WaveSeparator` → `GroupSeparator` with an indent level; checklist renders
+  the group tree depth-first with indented headers
+- [ ] Item dialog's wave picker becomes a hierarchical group picker, with
+  "New subgroup under…" support
+- [ ] Terminology pass: "Wave" → "Group / Section" in UI strings
+
+**Phase 5.5 test:** Scrolling the detail panel over a condition dropdown or price
+box never changes its value. Under Generation 1, create group "1984", then a
+subgroup "Autobot Cars" under it, add a figure to it, and see the checklist show
+an indented "Autobot Cars" header beneath the "1984" header.
+
+---
+
 ## Phase 6 — First Source Plugin (Figure Realm)
 
 **Deliverable:** An Import dialog lets you browse Figure Realm by manufacturer and

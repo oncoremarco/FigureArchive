@@ -182,6 +182,34 @@ This keeps the data model clean: you don't mix figure fields and vinyl fields
 within the same line, but you can have a Transformers G1 line (figures) and a
 Transformers Soundtrack line (vinyl) within the same Transformers franchise.
 
+### Nested groups within a Line (self-nesting "waves")
+
+The original model had a single flat grouping level under a Line ("waves").
+Real toylines need deeper, variable nesting, and the "primary axis" differs:
+
+- **TF G1** (tfwiki): `1984 → Autobot Cars / Decepticons / Mini-Vehicles`,
+  `1985 → Dinobots / Insecticons / …` — a year level *and* a subgroup level.
+- **Mighty Max**: `Doom Zones → Horror Heads → …` — series → sub-series.
+- **McDonald's Changeables**: `1987 set / 1989 set` — year *is* the subgroup.
+
+**Decision:** generalise the flat wave level into a **self-nesting Group** (the
+`waves` table gains a nullable self-referencing `parent_id`). Depth is optional
+and arbitrary — a simple line stays one flat level; G1 nests two; Mighty Max can
+nest as deep as needed. An item attaches to a leaf group, or directly to the
+Line when ungrouped.
+
+**Where the nesting is shown:** *inside the checklist* as indented headers, not
+as expandable nodes in the left sidebar. This keeps the "whole toyline as one
+scrollable completion checklist" mental model, mirroring the layout of the wiki
+pages collectors reference. The sidebar stays Franchise → Line. (Promoting
+groups into the sidebar for very large collections remains a later option; the
+data model is identical either way.)
+
+**Cross-cutting axes stay as tags.** A figure is simultaneously "1985" and "a
+Dinobot." A strict tree forces one parent; the other axis (faction, scale,
+assortment) is expressed with item **tags**, which already exist, so you can
+filter "all Dinobots across all years" without fighting the hierarchy.
+
 ---
 
 ## 4. Plugin System Design

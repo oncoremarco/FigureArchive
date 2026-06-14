@@ -3,12 +3,15 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
-    QHBoxLayout, QLabel, QLineEdit, QMenu, QPlainTextEdit, QPushButton,
-    QScrollArea, QVBoxLayout, QWidget,
+    QCheckBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel,
+    QLineEdit, QMenu, QPlainTextEdit, QPushButton, QScrollArea, QVBoxLayout,
+    QWidget,
 )
 
 from figure_archive.core import image_cache
+from figure_archive.ui.widgets.no_scroll import (
+    NoScrollComboBox, NoScrollDoubleSpinBox,
+)
 from figure_archive.db import items as item_db
 from figure_archive.db import item_images as img_db
 from figure_archive.db import personal_photos as photo_db
@@ -76,10 +79,11 @@ class DetailPanel(QWidget):
         self._title.setStyleSheet("font-size: 15px; font-weight: bold;")
         tl.addWidget(self._title, 1)
         self._fav_btn = QPushButton("☆")
-        self._fav_btn.setFixedWidth(34)
+        self._fav_btn.setFixedSize(34, 34)
         self._fav_btn.setCheckable(True)
         self._fav_btn.clicked.connect(self._on_fav_clicked)
         tl.addWidget(self._fav_btn)
+        self._render_fav_button()
         outer.addWidget(topbar)
 
         self._breadcrumb = QLabel("")
@@ -154,29 +158,29 @@ class DetailPanel(QWidget):
         form.setSpacing(8)
         form.setLabelAlignment(Qt.AlignRight)
 
-        self._status = QComboBox()
+        self._status = NoScrollComboBox()
         for val, label in _STATUS_OPTIONS:
             self._status.addItem(label, userData=val)
         self._status.currentIndexChanged.connect(self._on_status_changed)
         form.addRow("Status:", self._status)
 
-        self._priority = QComboBox()
+        self._priority = NoScrollComboBox()
         for val, label in _PRIORITY_OPTIONS:
             self._priority.addItem(label, userData=val)
         self._priority.currentIndexChanged.connect(self._schedule_save)
         self._priority_row = self._priority
         form.addRow("Priority:", self._priority)
 
-        self._condition = QComboBox()
+        self._condition = NoScrollComboBox()
         self._condition.currentIndexChanged.connect(self._schedule_save)
         form.addRow("Condition:", self._condition)
 
-        self._box_condition = QComboBox()
+        self._box_condition = NoScrollComboBox()
         self._box_condition.currentIndexChanged.connect(self._schedule_save)
         self._box_condition_label = "Box Cond.:"
         form.addRow("Box Cond.:", self._box_condition)
 
-        self._packaging = QComboBox()
+        self._packaging = NoScrollComboBox()
         self._packaging.currentIndexChanged.connect(self._schedule_save)
         form.addRow("Packaging:", self._packaging)
 
@@ -223,13 +227,13 @@ class DetailPanel(QWidget):
         self._acquired_from.textChanged.connect(self._schedule_save)
         form.addRow("Acquired from:", self._acquired_from)
 
-        self._paid = QDoubleSpinBox()
+        self._paid = NoScrollDoubleSpinBox()
         self._paid.setRange(0, 1_000_000)
         self._paid.setPrefix("$ ")
         self._paid.valueChanged.connect(self._schedule_save)
         form.addRow("Paid:", self._paid)
 
-        self._value = QDoubleSpinBox()
+        self._value = NoScrollDoubleSpinBox()
         self._value.setRange(0, 1_000_000)
         self._value.setPrefix("$ ")
         self._value.valueChanged.connect(self._schedule_save)
@@ -534,12 +538,16 @@ class DetailPanel(QWidget):
         self._schedule_save()
 
     def _render_fav_button(self) -> None:
+        base = (
+            "padding: 0px; text-align: center; font-size: 18px;"
+            "qproperty-flat: true;"
+        )
         if self._fav_btn.isChecked():
             self._fav_btn.setText("★")
-            self._fav_btn.setStyleSheet("color: #f9e2af; font-size: 16px;")
+            self._fav_btn.setStyleSheet(base + "color: #f9e2af;")
         else:
             self._fav_btn.setText("☆")
-            self._fav_btn.setStyleSheet("font-size: 16px;")
+            self._fav_btn.setStyleSheet(base + "color: #cdd6f4;")
 
     def _on_close(self) -> None:
         self._flush_pending_save()
@@ -607,11 +615,11 @@ class DetailPanel(QWidget):
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
-    def _set_combo_value(self, combo: QComboBox, value) -> None:
+    def _set_combo_value(self, combo, value) -> None:
         idx = combo.findData(value)
         combo.setCurrentIndex(idx if idx >= 0 else 0)
 
-    def _set_combo_text(self, combo: QComboBox, value) -> None:
+    def _set_combo_text(self, combo, value) -> None:
         if value is None:
             combo.setCurrentIndex(0)
             return
