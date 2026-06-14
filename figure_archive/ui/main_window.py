@@ -34,6 +34,7 @@ class MainWindow(QMainWindow):
         self._sidebar = Sidebar()
         self._sidebar.setMinimumWidth(180)
         self._sidebar.line_selected.connect(self._on_line_selected)
+        self._sidebar.groups_changed.connect(self._on_groups_changed)
         self._splitter.addWidget(self._sidebar)
 
         # Center: stacked (placeholder or checklist)
@@ -96,6 +97,12 @@ class MainWindow(QMainWindow):
     def _on_data_changed(self) -> None:
         # ownership toggled in checklist; nothing else to refresh for now
         pass
+
+    def _on_groups_changed(self, line_id: str) -> None:
+        # Refresh the checklist if it's currently showing the affected line
+        if (self._center.currentWidget() is self._checklist
+                and getattr(self._checklist, "_line_id", None) == line_id):
+            self._checklist.refresh()
 
     def _new_collection(self) -> None:
         from figure_archive.ui.dialogs.welcome_dialog import WelcomeDialog

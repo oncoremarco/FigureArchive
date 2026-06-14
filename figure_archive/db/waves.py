@@ -65,6 +65,34 @@ def rename_wave(wid: str, name: str) -> None:
     conn.commit()
 
 
+def descendant_ids(wid: str) -> set[str]:
+    """Return the set of all groups nested beneath `wid` (not including wid)."""
+    conn = get_connection()
+    result: set[str] = set()
+    frontier = [wid]
+    while frontier:
+        current = frontier.pop()
+        rows = conn.execute(
+            "SELECT id FROM waves WHERE parent_id=?", (current,)
+        ).fetchall()
+        for r in rows:
+            if r["id"] not in result:
+                result.add(r["id"])
+                frontier.append(r["id"])
+    return result
+
+
+def set_parent(wid: str, parent_id: str | None) -> None:
+    """Reparent a group. Refuses to create a cycle (parent under its own subtree)."""
+    if parent_id == wid:
+        raise ValueError("A group cannot be its own parent.")
+    if parent_id is not None and parent_id in descendant_ids(wid):
+        raise ValueError("Cannot move a group under one of its own subgroups.")
+    conn = get_connection()
+    conn.execute("UPDATE waves SET parent_id=? WHERE id=?", (parent_id, wid))
+    conn.commit()
+
+
 def delete_wave(wid: str) -> None:
     """Delete a group; its items fall back to no-group, children become roots."""
     conn = get_connection()
