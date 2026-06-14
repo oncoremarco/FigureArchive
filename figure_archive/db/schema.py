@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS lines (
 CREATE TABLE IF NOT EXISTS waves (
     id          TEXT PRIMARY KEY,
     line_id     TEXT NOT NULL REFERENCES lines(id) ON DELETE CASCADE,
+    parent_id   TEXT REFERENCES waves(id) ON DELETE SET NULL,
     name        TEXT NOT NULL,
     year        INTEGER,
     sort_order  INTEGER DEFAULT 0,
@@ -160,9 +161,24 @@ CREATE TABLE IF NOT EXISTS auction_log (
 """
 
 
+_MIGRATIONS = [
+    # Add parent_id to waves for self-nesting groups (Phase 5.5)
+    "ALTER TABLE waves ADD COLUMN parent_id TEXT REFERENCES waves(id) ON DELETE SET NULL",
+]
+
+
 def apply_schema(conn: sqlite3.Connection) -> None:
     for statement in _TABLES.strip().split(";"):
         stmt = statement.strip()
         if stmt:
             conn.execute(stmt)
+    _apply_migrations(conn)
     conn.commit()
+
+
+def _apply_migrations(conn: sqlite3.Connection) -> None:
+    for sql in _MIGRATIONS:
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError:
+            pass  # column already exists

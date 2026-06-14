@@ -536,16 +536,19 @@ stay as item **tags**, since a figure can be both "1985" and "a Dinobot."
 - [x] Fixed-square (34×34) fav button with zeroed padding + centered glyph so
   the star is no longer clipped by the global QSS button padding
 
-### 5.5.3 Self-nesting groups (planned)
+### 5.5.3 Self-nesting groups   ✅
 
-- [ ] Schema: add nullable self-FK `parent_id` to the `waves` table
-- [ ] DB layer: group CRUD gains `parent_id`; add a "list groups as tree" query
-- [ ] Item attaches to a leaf group, or directly to the Line if ungrouped
-- [ ] `WaveSeparator` → `GroupSeparator` with an indent level; checklist renders
-  the group tree depth-first with indented headers
-- [ ] Item dialog's wave picker becomes a hierarchical group picker, with
-  "New subgroup under…" support
-- [ ] Terminology pass: "Wave" → "Group / Section" in UI strings
+- [x] Schema: nullable self-FK `parent_id` on `waves`; `_MIGRATIONS` list for
+  safe `ALTER TABLE` on existing databases
+- [x] `db/waves.py`: `create_wave` gains `parent_id`; `list_groups_tree()`
+  returns depth-first flat list with `depth` key
+- [x] `WaveSeparator` → `GroupSeparator` with depth-based left indent and
+  colour distinction (bold blue at depth 0, lighter blue for subgroups)
+- [x] Checklist `_rebuild` walks the depth-first tree; items inherit `depth+1`
+  indent so they align under their group header
+- [x] Item dialog "Wave" picker → "Group" picker showing indented tree;
+  "＋ New Root Group…" and "＋ New Subgroup under…" actions in dropdown
+- [x] Spin boxes in item dialog swapped to `NoScrollSpinBox` / `NoScrollComboBox`
 
 **Phase 5.5 test:** Scrolling the detail panel over a condition dropdown or price
 box never changes its value. Under Generation 1, create group "1984", then a

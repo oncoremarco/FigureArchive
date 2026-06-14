@@ -1,24 +1,27 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QInputDialog,
-    QLabel, QLineEdit, QSpinBox, QVBoxLayout,
+    QDialog, QDialogButtonBox, QFormLayout, QInputDialog, QLabel,
+    QLineEdit, QVBoxLayout,
 )
 
 from figure_archive.db import waves as wave_db
+from figure_archive.ui.widgets.no_scroll import NoScrollComboBox, NoScrollSpinBox
 
 ITEM_TYPES = ["figure", "vehicle", "playset", "accessory", "giftset", "other"]
 
-_NEW_WAVE_SENTINEL = "__new_wave__"
+_NO_GROUP = "__no_group__"
+_NEW_GROUP = "__new_group__"
+_NEW_SUBGROUP = "__new_subgroup__"
 
 
 class ItemDialog(QDialog):
-    """Create a new item within a line. Allows picking or creating a wave."""
+    """Create a new item within a line."""
 
     def __init__(self, parent, line_id: str):
         super().__init__(parent)
         self._line_id = line_id
         self.setWindowTitle("Add Item")
-        self.setMinimumWidth(380)
+        self.setMinimumWidth(400)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         self._build_ui()
 
@@ -35,21 +38,21 @@ class ItemDialog(QDialog):
         self._name_edit.textChanged.connect(self._on_text_changed)
         form.addRow(QLabel("Name:"), self._name_edit)
 
-        self._type_combo = QComboBox()
+        self._type_combo = NoScrollComboBox()
         for t in ITEM_TYPES:
             self._type_combo.addItem(t.capitalize(), userData=t)
         form.addRow(QLabel("Type:"), self._type_combo)
 
-        self._year_spin = QSpinBox()
+        self._year_spin = NoScrollSpinBox()
         self._year_spin.setRange(0, 2100)
         self._year_spin.setSpecialValueText("—")
         self._year_spin.setValue(0)
         form.addRow(QLabel("Year:"), self._year_spin)
 
-        self._wave_combo = QComboBox()
-        self._reload_waves()
-        self._wave_combo.currentIndexChanged.connect(self._on_wave_changed)
-        form.addRow(QLabel("Wave:"), self._wave_combo)
+        self._group_combo = NoScrollComboBox()
+        self._reload_groups()
+        self._group_combo.currentIndexChanged.connect(self._on_group_changed)
+        form.addRow(QLabel("Group:"), self._group_combo)
 
         layout.addLayout(form)
 
@@ -62,27 +65,64 @@ class ItemDialog(QDialog):
 
         self._name_edit.setFocus()
 
-    def _reload_waves(self, select_id: str | None = None) -> None:
-        self._wave_combo.blockSignals(True)
-        self._wave_combo.clear()
-        self._wave_combo.addItem("No Wave", userData=None)
-        for w in wave_db.list_waves(self._line_id):
-            self._wave_combo.addItem(w["name"], userData=w["id"])
-        self._wave_combo.addItem("＋ New Wave…", userData=_NEW_WAVE_SENTINEL)
-        if select_id:
-            idx = self._wave_combo.findData(select_id)
-            if idx >= 0:
-                self._wave_combo.setCurrentIndex(idx)
-        self._wave_combo.blockSignals(False)
+    def _reload_groups(self, select_id: str | None = None) -> None:
+        self._group_combo.blockSignals(True)
+        self._group_combo.clear()
+        self._group_combo.addItem("No Group", userData=None)
 
-    def _on_wave_changed(self, _idx: int) -> None:
-        if self._wave_combo.currentData() == _NEW_WAVE_SENTINEL:
-            name, ok = QInputDialog.getText(self, "New Wave", "Wave name:")
+        groups = wave_db.list_groups_tree(self._line_id)
+        for g in groups:
+            indent = "    " * g["depth"]  # nbsp indent
+            label = f"{indent}{g['name']}" + (f"  {g['year']}" if g.get("year") else "")
+            self._group_combo.addItem(label, userData=g["id"])
+
+        self._group_combo.insertSeparator(self._group_combo.count())
+        self._group_combo.addItem("＋ New Root Group…", userData=_NEW_GROUP)
+        if groups:
+            self._group_combo.addItem("＋ New Subgroup under…", userData=_NEW_SUBGROUP)
+
+        if select_id:
+            idx = self._group_combo.findData(select_id)
+            if idx >= 0:
+                self._group_combo.setCurrentIndex(idx)
+        self._group_combo.blockSignals(False)
+
+    def _on_group_changed(self, _idx: int) -> None:
+        data = self._group_combo.currentData()
+        if data == _NEW_GROUP:
+            name, ok = QInputDialog.getText(self, "New Group", "Group name:")
             if ok and name.strip():
-                wid = wave_db.create_wave(self._line_id, name.strip())
-                self._reload_waves(select_id=wid)
+                gid = wave_db.create_wave(self._line_id, name.strip())
+                self._reload_groups(select_id=gid)
             else:
-                self._wave_combo.setCurrentIndex(0)  # back to No Wave
+                self._group_combo.setCurrentIndex(0)
+
+        elif data == _NEW_SUBGROUP:
+            groups = wave_db.list_groups_tree(self._line_id)
+            if not groups:
+                self._group_combo.setCurrentIndex(0)
+                return
+            # Ask user which parent
+            parent_labels = []
+            parent_ids = []
+            for g in groups:
+                indent = "    " * g["depth"]
+                parent_labels.append(f"{indent}{g['name']}")
+                parent_ids.append(g["id"])
+            parent_label, ok = QInputDialog.getItem(
+                self, "Choose Parent Group", "Create subgroup under:",
+                parent_labels, editable=False,
+            )
+            if not ok:
+                self._group_combo.setCurrentIndex(0)
+                return
+            parent_id = parent_ids[parent_labels.index(parent_label)]
+            name, ok2 = QInputDialog.getText(self, "New Subgroup", "Subgroup name:")
+            if ok2 and name.strip():
+                gid = wave_db.create_wave(self._line_id, name.strip(), parent_id=parent_id)
+                self._reload_groups(select_id=gid)
+            else:
+                self._group_combo.setCurrentIndex(0)
 
     def _on_text_changed(self, text: str) -> None:
         self._buttons.button(QDialogButtonBox.Ok).setEnabled(bool(text.strip()))
@@ -100,5 +140,5 @@ class ItemDialog(QDialog):
         return v if v > 0 else None
 
     def wave_id(self) -> str | None:
-        data = self._wave_combo.currentData()
-        return None if data in (None, _NEW_WAVE_SENTINEL) else data
+        data = self._group_combo.currentData()
+        return None if data in (None, _NO_GROUP, _NEW_GROUP, _NEW_SUBGROUP) else data

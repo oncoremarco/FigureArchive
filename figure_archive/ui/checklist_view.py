@@ -26,16 +26,20 @@ _TYPE_COLORS = {
     "accessory": "#94e2d5", "giftset": "#fab387", "other": "#6c7086",
 }
 
+# Indent per depth level in pixels
+_INDENT_PX = 16
+
 
 class ItemRow(QFrame):
     """A single checklist row."""
     clicked = Signal(str)             # item_id
     owned_toggled = Signal(str, int)  # item_id, new_status
 
-    def __init__(self, item: dict):
+    def __init__(self, item: dict, depth: int = 0):
         super().__init__()
         self._item = item
         self._item_id = item["id"]
+        self._depth = depth
         self.setObjectName("itemRow")
         self.setStyleSheet(
             "#itemRow { border-radius: 6px; }"
@@ -45,7 +49,8 @@ class ItemRow(QFrame):
 
     def _build(self) -> None:
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
+        left_margin = 8 + self._depth * _INDENT_PX
+        layout.setContentsMargins(left_margin, 6, 8, 6)
         layout.setSpacing(10)
 
         owned = self._item.get("owned") or 0
@@ -113,30 +118,38 @@ class ItemRow(QFrame):
         self.owned_toggled.emit(self._item_id, new_status)
 
     def mousePressEvent(self, event) -> None:
-        # Click anywhere except the checkbox opens detail
         if not self._check.underMouse():
             self.clicked.emit(self._item_id)
         super().mousePressEvent(event)
 
 
-class WaveSeparator(QFrame):
-    def __init__(self, name: str, total: int, owned: int, year: int | None):
+class GroupSeparator(QFrame):
+    """Section header for a named group, indented by depth."""
+
+    def __init__(self, name: str, total: int, owned: int,
+                 year: int | None, depth: int = 0):
         super().__init__()
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 10, 8, 4)
+        left_margin = 8 + depth * _INDENT_PX
+        layout.setContentsMargins(left_margin, 10 if depth == 0 else 6, 8, 4)
 
-        title = name + (f", {year}" if year else "")
+        title = name + (f"  {year}" if year else "")
         lbl = QLabel(title)
-        lbl.setStyleSheet("font-weight: bold; color: #89b4fa; font-size: 12px;")
+        # Root groups: bold blue; sub-groups: smaller, muted
+        if depth == 0:
+            lbl.setStyleSheet("font-weight: bold; color: #89b4fa; font-size: 12px;")
+        else:
+            lbl.setStyleSheet("font-weight: bold; color: #74c7ec; font-size: 11px;")
         layout.addWidget(lbl)
 
-        stats = QLabel(f"{total} items · {owned} owned")
-        stats.setStyleSheet("color: #6c7086; font-size: 11px;")
-        layout.addWidget(stats)
+        if total:
+            stats = QLabel(f"{total} · {owned} owned")
+            stats.setStyleSheet("color: #6c7086; font-size: 10px;")
+            layout.addWidget(stats)
         layout.addStretch(1)
 
-        underline = QFrame()
-        self.setStyleSheet("border-bottom: 1px solid #313244;")
+        border_color = "#313244" if depth == 0 else "#1e1e2e"
+        self.setStyleSheet(f"border-bottom: 1px solid {border_color};")
 
 
 class ChecklistView(QWidget):
@@ -207,40 +220,67 @@ class ChecklistView(QWidget):
         if not self._line_id:
             return
 
-        items = item_db.list_items(self._line_id)
-        waves = wave_db.list_waves(self._line_id)
+        all_items = item_db.list_items(self._line_id)
+        # Depth-first flat list of groups with 'depth' key
+        groups = wave_db.list_groups_tree(self._line_id)
 
-        # Group items by wave_id
-        by_wave: dict[str | None, list[dict]] = {}
-        for it in items:
-            by_wave.setdefault(it["wave_id"], []).append(it)
+        # Map group_id → items in that group (leaf attachment)
+        by_group: dict[str | None, list[dict]] = {}
+        for it in all_items:
+            by_group.setdefault(it.get("wave_id"), []).append(it)
 
         insert_at = 0
 
-        def add_group(wave_name, wave_year, group):
+        def _insert(widget) -> None:
             nonlocal insert_at
-            if not group:
-                return
-            owned = sum(1 for g in group if (g.get("owned") or 0) == ce.OWNED)
-            sep = WaveSeparator(wave_name, len(group), owned, wave_year)
-            self._list_layout.insertWidget(insert_at, sep)
+            self._list_layout.insertWidget(insert_at, widget)
             insert_at += 1
-            for it in group:
-                row = ItemRow(it)
+
+        def _add_items(group_items: list[dict], depth: int) -> None:
+            for it in group_items:
+                row = ItemRow(it, depth=depth)
                 row.clicked.connect(self.item_selected)
                 row.owned_toggled.connect(self._on_owned_toggled)
-                self._list_layout.insertWidget(insert_at, row)
-                insert_at += 1
+                _insert(row)
 
-        # Items with no wave first
-        if None in by_wave:
-            add_group("Unsorted", None, by_wave[None])
-        # Then each defined wave in order
-        for w in waves:
-            add_group(w["name"], w.get("year"), by_wave.get(w["id"], []))
+        def _count_owned(gid: str | None, groups_flat: list[dict]) -> tuple[int, int]:
+            """Count total/owned items in this group and all its descendants."""
+            gids = {gid}
+            for g in groups_flat:
+                if g.get("parent_id") in gids:
+                    gids.add(g["id"])
+            total = sum(len(by_group.get(g, [])) for g in gids)
+            owned = sum(
+                1 for g in gids
+                for it in by_group.get(g, [])
+                if (it.get("owned") or 0) == ce.OWNED
+            )
+            return total, owned
 
-        if not items:
-            empty = QLabel('No items yet. Click "Add Item" to start.')
+        # Unsorted items (no group) first
+        if None in by_group:
+            unsorted = by_group[None]
+            sep = GroupSeparator(
+                "Unsorted", len(unsorted),
+                sum(1 for i in unsorted if (i.get("owned") or 0) == ce.OWNED),
+                None, depth=0,
+            )
+            _insert(sep)
+            _add_items(unsorted, depth=1)
+
+        # Groups depth-first (list already ordered correctly by list_groups_tree)
+        for g in groups:
+            depth = g["depth"]
+            group_items = by_group.get(g["id"], [])
+            total, owned = _count_owned(g["id"], groups)
+            # Only show header if the group or any descendant has items,
+            # OR if the group itself exists (empty groups still show)
+            sep = GroupSeparator(g["name"], total, owned, g.get("year"), depth=depth)
+            _insert(sep)
+            _add_items(group_items, depth=depth + 1)
+
+        if not all_items:
+            empty = QLabel('No items yet. Click "＋ Add Item" to start.')
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet("color: #45475a; padding: 40px;")
             self._list_layout.insertWidget(0, empty)
