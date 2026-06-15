@@ -70,18 +70,35 @@ def s3_dump_url(dbname: str, kind: str = "current") -> str:
 
 
 # Starter set. The user is curating more on their end — add to this freely.
+#
+# IMPORTANT: a wiki only has an S3 dump if one was *generated on demand* (an
+# admin clicks "request" on Special:Statistics). Most wikis — including big
+# active ones — have NO dump until requested, and S3 answers 403 for the
+# missing object. That 403 is expected, not a bug in this tool. `muppet` is
+# included as a known-good wiki whose dump exists today, so the full
+# download→decompress→index pipeline can be verified end-to-end.
 STARTER_WIKIS: dict[str, FandomWiki] = {
+    "muppet": FandomWiki(
+        key="muppet",
+        name="Muppet Wiki",
+        subdomain="muppet",
+        note="KNOWN-GOOD test wiki — its dump exists on S3 today. Not toys, "
+             "but proves the pipeline works end-to-end.",
+    ),
     "transformers": FandomWiki(
         key="transformers",
         name="Teletraan I: The Transformers Wiki",
         subdomain="transformers",
-        note="Hasbro/Takara Transformers toylines and characters.",
+        note="Hasbro/Takara Transformers toylines and characters. NOTE: no S3 "
+             "dump generated yet (403) — an admin must request one at "
+             "Special:Statistics first.",
     ),
     "mightymax": FandomWiki(
         key="mightymax",
         name="Mighty Max Wiki",
         subdomain="mightymax",
-        note="Bluebird/Mattel Mighty Max playsets and figures.",
+        note="Bluebird/Mattel Mighty Max playsets and figures. NOTE: no S3 "
+             "dump generated yet (403) — request one at Special:Statistics first.",
     ),
     "mcdonalds": FandomWiki(
         key="mcdonalds",
