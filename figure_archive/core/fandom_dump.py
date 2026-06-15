@@ -133,6 +133,52 @@ def _session(referer: str | None = None):
     return s
 
 
+def _explain_s3_error(resp, url: str, subdomain: str) -> str:
+    """Turn an S3 non-200 GET into a human-readable diagnosis.
+
+    S3 returns the real reason in an XML body (<Code>/<Message>). The most
+    important case for old Fandom dumps is an archived object: the file still
+    exists (HEAD says 200) but has been lifecycled into Glacier/cold storage,
+    so GET is denied until someone who owns the bucket restores it — which we
+    cannot do. In that case a freshly regenerated dump is the only path.
+    """
+    import re
+
+    code = ""
+    try:
+        body = resp.text or ""
+        m = re.search(r"<Code>([^<]+)</Code>", body)
+        if m:
+            code = m.group(1).strip()
+        mm = re.search(r"<Message>([^<]+)</Message>", body)
+        message = mm.group(1).strip() if mm else ""
+    except Exception:  # noqa: BLE001
+        message = ""
+
+    base = f"S3 returned {resp.status_code} for {url}"
+    if code:
+        base += f" (S3 code: {code})"
+
+    if code in ("InvalidObjectState",) or "glacier" in message.lower() or \
+            "storage class" in message.lower():
+        return (
+            f"{base}. The dump file exists but has been moved to cold/archival "
+            f"storage by Fandom and is not directly downloadable. Only Fandom "
+            f"can restore it. Your best path is a freshly regenerated dump — "
+            f"request one at https://{subdomain}.fandom.com/wiki/Special:Statistics "
+            f"and retry once it's rebuilt (usually a few hours)."
+        )
+    if resp.status_code == 403:
+        return (
+            f"{base}. Access is denied even though a HEAD check saw the object. "
+            f"This usually means the stored dump is archived/cold or the bucket "
+            f"won't serve it to direct clients. Request a fresh dump at "
+            f"https://{subdomain}.fandom.com/wiki/Special:Statistics and retry. "
+            + (f"S3 said: {message}" if message else "")
+        )
+    return base + (f". S3 said: {message}" if message else "")
+
+
 def resolve_dump_url(dbname: str, kind: str = "current", *, session=None) -> str:
     """Return a verified S3 dump URL for a wiki, or raise if none exists.
 
@@ -182,7 +228,8 @@ def download_dump(
 
     total = 0
     with sess.get(dump_url, stream=True, timeout=120) as resp:
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            raise RuntimeError(_explain_s3_error(resp, dump_url, subdomain))
         with open(local_path, "wb") as fh:
             for chunk in resp.iter_content(chunk_size=65536):
                 if chunk:
