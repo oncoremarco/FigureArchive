@@ -122,10 +122,14 @@ class DumpResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def _session():
+def _session(referer: str | None = None):
     import requests
     s = requests.Session()
-    s.headers.update({"User-Agent": USER_AGENT})
+    s.headers.update({
+        "User-Agent": USER_AGENT,
+        # Some S3 bucket policies check Referer; send the wiki's stats page.
+        "Referer": referer or "https://www.fandom.com/",
+    })
     return s
 
 
@@ -167,7 +171,8 @@ def download_dump(
     dbname = wiki.db if wiki else wiki_key
     name = wiki.name if wiki else wiki_key
 
-    sess = session or _session()
+    referer = f"https://{subdomain}.fandom.com/wiki/Special:Statistics"
+    sess = session or _session(referer=referer)
     dump_url = resolve_dump_url(dbname, kind=kind, session=sess)
 
     dest = Path(dest_dir)
