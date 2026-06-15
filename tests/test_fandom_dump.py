@@ -1,8 +1,8 @@
 """Offline tests for the Fandom dump tooling.
 
 Runs without network: the XML parser is exercised on a fixture, and dump-URL
-resolution is exercised against a fixture Special:Statistics page via a fake
-session. Run with:  python -m tests.test_fandom_dump
+resolution is exercised against a fake session that mocks S3 HEAD responses.
+Run with:  python -m tests.test_fandom_dump
 """
 
 from pathlib import Path
@@ -12,20 +12,18 @@ from figure_archive.core import fandom_dump, mediawiki_xml
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-class _FakeResponse:
-    def __init__(self, text):
-        self.text = text
-
-    def raise_for_status(self):
-        pass
+class _FakeHeadResponse:
+    def __init__(self, status_code=200):
+        self.status_code = status_code
 
 
-class _FakeSession:
-    def __init__(self, text):
-        self._text = text
+class _FakeS3Session:
+    """Simulates S3 HEAD responses; GET is unused by resolve_dump_url."""
+    def __init__(self, status_code=200):
+        self._status_code = status_code
 
-    def get(self, url, **kwargs):
-        return _FakeResponse(self._text)
+    def head(self, url, **kwargs):
+        return _FakeHeadResponse(self._status_code)
 
 
 def test_iter_pages_and_categories():
@@ -58,8 +56,7 @@ def test_index_dump():
 
 
 def test_resolve_dump_url_current_and_full():
-    html = (FIXTURES / "sample_statistics.html").read_text()
-    sess = _FakeSession(html)
+    sess = _FakeS3Session(200)
     cur = fandom_dump.resolve_dump_url("transformers", kind="current", session=sess)
     assert cur.endswith("transformers_pages_current.xml.7z"), cur
     full = fandom_dump.resolve_dump_url("transformers", kind="full", session=sess)
@@ -68,11 +65,11 @@ def test_resolve_dump_url_current_and_full():
 
 
 def test_resolve_dump_url_missing():
-    sess = _FakeSession("<html><body>no dumps here</body></html>")
+    sess = _FakeS3Session(403)
     try:
         fandom_dump.resolve_dump_url("transformers", session=sess)
     except RuntimeError as exc:
-        assert "No 'current' dump link" in str(exc)
+        assert "No 'current' dump available" in str(exc)
         print("✓ resolve_dump_url raises when missing")
     else:
         raise AssertionError("expected RuntimeError")

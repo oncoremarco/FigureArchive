@@ -34,6 +34,12 @@ ACCURACY_NOTE = (
 )
 
 
+# Fandom/Wikia dumps are hosted on plain S3 (NOT behind the Cloudflare bot wall
+# that 403s the wiki itself), at a predictable path keyed by the wiki's database
+# name. Hitting S3 directly is both reliable and avoids the protected pages.
+S3_DUMPS_BASE = "https://s3.amazonaws.com/wikia_xml_dumps"
+
+
 @dataclass
 class FandomWiki:
     """A registered Fandom wiki we know how to pull a dump from."""
@@ -41,10 +47,26 @@ class FandomWiki:
     name: str              # display name
     subdomain: str         # <subdomain>.fandom.com
     note: str = ""
+    dbname: str | None = None  # S3 dump db name; defaults to subdomain
 
     @property
     def base_url(self) -> str:
         return f"https://{self.subdomain}.fandom.com"
+
+    @property
+    def db(self) -> str:
+        return self.dbname or self.subdomain
+
+
+def s3_dump_url(dbname: str, kind: str = "current") -> str:
+    """Build the direct S3 URL for a wiki's dump.
+
+    Pattern: <base>/<c>/<cc>/<db>_pages_<current|full>.xml.7z
+    e.g. .../t/tr/transformers_pages_current.xml.7z
+    """
+    db = dbname.lower()
+    suffix = "full" if kind == "full" else "current"
+    return f"{S3_DUMPS_BASE}/{db[0]}/{db[:2]}/{db}_pages_{suffix}.xml.7z"
 
 
 # Starter set. The user is curating more on their end — add to this freely.
@@ -65,7 +87,8 @@ STARTER_WIKIS: dict[str, FandomWiki] = {
         key="mcdonalds",
         name="Kids Meal Toys Wiki (McDonald's)",
         subdomain="kidsmeal",
-        note="McDonald's Happy Meal toy lines (Changeables, etc.).",
+        note="McDonald's Happy Meal toys. NOTE: no S3 dump generated yet — an "
+             "admin must request one from Special:Statistics before it can be pulled.",
     ),
 }
 
@@ -89,37 +112,26 @@ def _session():
     return s
 
 
-def resolve_dump_url(subdomain: str, kind: str = "current", *, session=None) -> str:
-    """Return the .7z dump URL for a wiki by parsing its Special:Statistics page.
+def resolve_dump_url(dbname: str, kind: str = "current", *, session=None) -> str:
+    """Return a verified S3 dump URL for a wiki, or raise if none exists.
+
+    Hits S3 directly (avoids Fandom's Cloudflare bot wall). A HEAD that isn't
+    200 means no dump was generated for that wiki — Fandom only produces dumps
+    on demand, so this is common.
 
     kind: "current" (current revision of each page) or "full" (with history).
-    Raises RuntimeError if no matching dump link is found.
     """
-    from bs4 import BeautifulSoup
-
     sess = session or _session()
-    base = f"https://{subdomain}.fandom.com"
-    stats_url = f"{base}/wiki/Special:Statistics"
-    resp = sess.get(stats_url, timeout=30)
-    resp.raise_for_status()
-
-    soup = BeautifulSoup(resp.text, "html.parser")
-    # The page links to dump files whose hrefs contain pages_current.xml /
-    # pages_full.xml (compressed as .7z). Match resiliently on the href text.
-    needle = "pages_full.xml" if kind == "full" else "pages_current.xml"
-    candidates: list[str] = []
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if needle in href:
-            candidates.append(urljoin(stats_url, href))
-
-    if not candidates:
+    url = s3_dump_url(dbname, kind=kind)
+    resp = sess.head(url, timeout=30, allow_redirects=True)
+    if resp.status_code != 200:
         raise RuntimeError(
-            f"No '{kind}' dump link found on {stats_url}. The dump may be stale or "
-            f"missing — an admin can regenerate it from Special:Statistics."
+            f"No '{kind}' dump available for '{dbname}' (S3 returned "
+            f"{resp.status_code}). Fandom generates dumps on demand — an admin "
+            f"can request one at https://{dbname}.fandom.com/wiki/Special:Statistics, "
+            f"then it appears at {url}."
         )
-    # Prefer the first; Fandom typically lists a single current/full link.
-    return candidates[0]
+    return url
 
 
 def download_dump(
@@ -135,10 +147,11 @@ def download_dump(
     """
     wiki = STARTER_WIKIS.get(wiki_key)
     subdomain = wiki.subdomain if wiki else wiki_key
+    dbname = wiki.db if wiki else wiki_key
     name = wiki.name if wiki else wiki_key
 
     sess = session or _session()
-    dump_url = resolve_dump_url(subdomain, kind=kind, session=sess)
+    dump_url = resolve_dump_url(dbname, kind=kind, session=sess)
 
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
