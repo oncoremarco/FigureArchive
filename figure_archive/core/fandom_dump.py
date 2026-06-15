@@ -215,7 +215,13 @@ def download_dump(
 
 def decompress_dump(archive_path: str | Path) -> Path:
     """Extract the .7z dump's XML into the same directory; return the XML path."""
-    import py7zr
+    try:
+        import py7zr
+    except ImportError as exc:
+        raise RuntimeError(
+            "py7zr is required to decompress .7z dumps — run: pip install py7zr "
+            "(or pip install -r requirements.txt)."
+        ) from exc
 
     archive = Path(archive_path)
     out_dir = archive.parent
